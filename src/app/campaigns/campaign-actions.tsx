@@ -1,0 +1,9 @@
+'use client'
+import { useState } from 'react'
+
+export function CampaignActions({campaignId,status}:{campaignId:string;status:string}){
+  const [busy,setBusy]=useState(false);const [message,setMessage]=useState('')
+  async function test(){const email=window.prompt('Send the test to which email?');if(!email)return;setBusy(true);setMessage('Sending test…');try{const res=await fetch('/api/test-send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({campaignId,email})});const data=await res.json();if(!res.ok)throw new Error(data.error||'Test failed');setMessage('Test sent.');setTimeout(()=>location.reload(),700)}catch(err){setMessage(err instanceof Error?err.message:'Test failed')}finally{setBusy(false)}}
+  async function send(){if(status!=='tested'&&status!=='ready'){setMessage('Send a test first.');return}const phrase=window.prompt('This sends to every eligible contact. Type SEND to continue.');if(phrase!=='SEND')return;if(!window.confirm('Final confirmation: send this campaign now?'))return;setBusy(true);setMessage('Sending… do not click again.');try{const res=await fetch('/api/campaigns/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({campaignId,confirmation:'SEND'})});const data=await res.json();if(!res.ok)throw new Error(data.error||'Send failed');setMessage(`Sent to ${data.sent} contacts.`);setTimeout(()=>location.reload(),1000)}catch(err){setMessage(err instanceof Error?err.message:'Send failed')}finally{setBusy(false)}}
+  return <div className="toolbar"><button className="secondary" onClick={test} disabled={busy||status==='sending'||status==='sent'}>Send test</button><button onClick={send} disabled={busy||!['tested','ready'].includes(status)}>Send audience</button>{message&&<small>{message}</small>}</div>
+}
