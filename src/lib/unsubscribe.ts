@@ -1,0 +1,4 @@
+import crypto from 'node:crypto'
+function secret(){const value=process.env.UNSUBSCRIBE_SECRET;if(!value)throw new Error('UNSUBSCRIBE_SECRET is not configured');return value}
+export function createUnsubscribeToken(contactId:string,email:string){const payload=Buffer.from(JSON.stringify({contactId,email:email.toLowerCase()})).toString('base64url');const sig=crypto.createHmac('sha256',secret()).update(payload).digest('base64url');return `${payload}.${sig}`}
+export function verifyUnsubscribeToken(token:string){const[payload,sig]=token.split('.');if(!payload||!sig)return null;const expected=crypto.createHmac('sha256',secret()).update(payload).digest();const actual=Buffer.from(sig,'base64url');if(expected.length!==actual.length||!crypto.timingSafeEqual(expected,actual))return null;try{const data=JSON.parse(Buffer.from(payload,'base64url').toString('utf8')) as {contactId:string;email:string};return data.contactId&&data.email?data:null}catch{return null}}
