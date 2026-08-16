@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
 
+export const dynamic='force-dynamic'
+
 async function getStats(){
   if(!isSupabaseConfigured()) return {total:0,eligible:0,suppressed:0,campaigns:0}
   const db=getSupabaseAdmin()
