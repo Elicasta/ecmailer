@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { normalizeEmail, parseCsv } from '@/lib/csv'
+import { getResend } from '@/lib/resend'
 
 export const runtime='nodejs'
+
+function csvCell(value:string|null){const text=value??'';return `"${text.replace(/"/g,'""')}"`}
 
 export async function POST(request:Request){
   try{
@@ -14,7 +17,16 @@ export async function POST(request:Request){
     const contacts=[...seen.entries()].map(([email,row])=>({email,first_name:row['First Name']||row.first_name||null,last_name:row['Last Name']||row.last_name||null,company:row.Company||row.company||null,phone:row.Phone||row.phone||null,address:row.Address||row.address||null,city:row.City||row.city||null,state:row.State||row.state||null,zip:row.Zip||row.ZIP||row.zip||null,country:row.Country||row.country||null,notes:row.Notes||row.notes||null,source:'pixieset',source_type:(row.Type||row.type||'other').toLowerCase(),updated_at:new Date().toISOString()}))
     const db=getSupabaseAdmin();const chunkSize=400
     for(let i=0;i<contacts.length;i+=chunkSize){const chunk=contacts.slice(i,i+chunkSize);const {error}=await db.from('ecm_contacts').upsert(chunk,{onConflict:'email',ignoreDuplicates:false});if(error)throw error}
-    await db.from('ecm_imports').insert({filename:file.name,total_rows:rows.length,inserted_rows:contacts.length,updated_rows:0,skipped_rows:skipped})
-    return NextResponse.json({rows:rows.length,unique:contacts.length,skipped})
+
+    let resendImportId:string|null=null;let resendImportStatus='not_configured'
+    const segmentId=process.env.RESEND_SEGMENT_ID
+    if(process.env.RESEND_API_KEY&&segmentId&&contacts.length){
+      const csv=['email,first_name,last_name',...contacts.map(c=>[csvCell(c.email),csvCell(c.first_name),csvCell(c.last_name)].join(','))].join('\n')
+      const result=await getResend().contacts.imports.create({file:new Blob([csv],{type:'text/csv'}),columnMap:{email:'email',firstName:'first_name',lastName:'last_name'},onConflict:'upsert',segments:[{id:segmentId}]})
+      if(result.error)throw new Error(`Supabase import succeeded, but Resend sync failed: ${result.error.message}`)
+      resendImportId=result.data?.id??null;resendImportStatus=resendImportId?'queued':'unknown'
+    }
+    await db.from('ecm_imports').insert({filename:file.name,total_rows:rows.length,inserted_rows:contacts.length,updated_rows:0,skipped_rows:skipped,resend_import_id:resendImportId,resend_import_status:resendImportStatus})
+    return NextResponse.json({rows:rows.length,unique:contacts.length,skipped,resendImportId,resendImportStatus})
   }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Import failed'},{status:500})}
 }
