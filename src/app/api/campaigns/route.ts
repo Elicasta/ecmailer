@@ -6,7 +6,9 @@ export async function POST(request:Request){
     const body=await request.json();
     const name=String(body.name||'').trim(),subject=String(body.subject||'').trim(),bodyHtml=String(body.bodyHtml||'').trim(),bodyText=String(body.bodyText||'').trim()
     if(!name||!subject||!bodyHtml||!bodyText)return NextResponse.json({error:'Name, subject, HTML body, and plain text body are required.'},{status:400})
-    const db=getSupabaseAdmin();const {data,error}=await db.from('ecm_campaigns').insert({name,subject,preview_text:String(body.previewText||'').trim()||null,body_html:bodyHtml,body_text:bodyText,cta_label:String(body.ctaLabel||'').trim()||null,cta_url:String(body.ctaUrl||'').trim()||null,status:'draft'}).select('id').single()
+    let scheduledAt:string|null=null
+    if(body.scheduledAt){const date=new Date(String(body.scheduledAt));if(Number.isNaN(date.getTime()))return NextResponse.json({error:'Schedule time is invalid.'},{status:400});if(date.getTime()<=Date.now())return NextResponse.json({error:'Schedule time must be in the future.'},{status:400});scheduledAt=date.toISOString()}
+    const db=getSupabaseAdmin();const {data,error}=await db.from('ecm_campaigns').insert({name,subject,preview_text:String(body.previewText||'').trim()||null,body_html:bodyHtml,body_text:bodyText,cta_label:String(body.ctaLabel||'').trim()||null,cta_url:String(body.ctaUrl||'').trim()||null,scheduled_at:scheduledAt,status:'draft'}).select('id').single()
     if(error)throw error;return NextResponse.json({id:data.id})
   }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Could not create campaign'},{status:500})}
 }
